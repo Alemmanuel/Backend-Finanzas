@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id VARCHAR(255);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 
 CREATE TABLE IF NOT EXISTS budgets (
@@ -19,5 +21,7 @@ CREATE TABLE IF NOT EXISTS budgets (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, category)
 );
+
+ALTER TABLE budgets ADD COLUMN IF NOT EXISTS user_id VARCHAR(255);
 
 CREATE INDEX IF NOT EXISTS idx_budgets_user_id ON budgets(user_id);
