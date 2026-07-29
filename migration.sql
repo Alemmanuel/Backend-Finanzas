@@ -9,4 +9,15 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+
+CREATE TABLE IF NOT EXISTS budgets (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    limit_amount DECIMAL(12,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, category)
+);
+
+CREATE INDEX IF NOT EXISTS idx_budgets_user_id ON budgets(user_id);

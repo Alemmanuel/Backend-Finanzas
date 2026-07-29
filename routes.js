@@ -103,4 +103,65 @@ router.delete('/transactions/:id', async (req, res) => {
   }
 });
 
+// --- BUDGETS ---
+
+router.get('/budgets', async (req, res) => {
+  const { user_id } = req.query;
+  if (!user_id) {
+    return res.status(400).json({ error: 'user_id es requerido' });
+  }
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, category, limit_amount FROM budgets WHERE user_id = $1 ORDER BY category',
+      [user_id]
+    );
+    res.json({ data: rows });
+  } catch (error) {
+    console.error('Error en GET /budgets:', error.message);
+    res.status(500).json({ error: 'Error al obtener presupuestos', details: error.message });
+  }
+});
+
+router.post('/budgets', async (req, res) => {
+  const { user_id, category, limit_amount } = req.body;
+  if (!user_id || !category || limit_amount === undefined) {
+    return res.status(400).json({ error: 'Faltan datos requeridos' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO budgets (user_id, category, limit_amount)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, category)
+       DO UPDATE SET limit_amount = $3
+       RETURNING id, category, limit_amount`,
+      [user_id, category, limit_amount]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (error) {
+    console.error('Error en POST /budgets:', error.message);
+    res.status(500).json({ error: 'Error al guardar presupuesto', details: error.message });
+  }
+});
+
+router.delete('/budgets/:category', async (req, res) => {
+  const { user_id } = req.query;
+  const { category } = req.params;
+  if (!user_id || !category) {
+    return res.status(400).json({ error: 'user_id y category son requeridos' });
+  }
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM budgets WHERE user_id = $1 AND category = $2',
+      [user_id, category]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'Presupuesto no encontrado' });
+    }
+    res.json({ message: 'Presupuesto eliminado' });
+  } catch (error) {
+    console.error('Error en DELETE /budgets/:category:', error.message);
+    res.status(500).json({ error: 'Error al eliminar presupuesto', details: error.message });
+  }
+});
+
 module.exports = router;
