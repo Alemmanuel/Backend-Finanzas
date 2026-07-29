@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id VARCHAR(255);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category VARCHAR(100);
 
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 
