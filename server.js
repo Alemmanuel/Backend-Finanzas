@@ -1,23 +1,17 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-
-// Importa el pool para la prueba de conexión a la DB
 const pool = require('./db');
-
-// Importa las rutas principales
-const routes = require('./routes');
-
 dotenv.config();
+
+const routes = require('./routes');
+const authRoutes = require('./auth');
+
 
 const app = express();
 
-// Configuración CORS más permisiva para desarrollo
-app.use(cors({
-  origin: '*', // Permite todas las conexiones en desarrollo
-  methods: ['GET', 'POST', 'DELETE'],
-  credentials: true
-}));
+app.use(cors());
+app.options('*', cors());
 
 // Middlewares para parsear JSON y URL-encoded
 app.use(express.json());
@@ -37,6 +31,9 @@ app.get('/api/test-db', async (req, res, next) => {
     next(error);
   }
 });
+
+// Monta rutas de autenticación
+app.use('/api/auth', authRoutes);
 
 // Monta las rutas de la API en el path '/api'
 app.use('/api', routes);

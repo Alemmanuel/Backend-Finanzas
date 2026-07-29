@@ -9,7 +9,7 @@ const createTable = async () => {
     console.log('Database connection successful');
 
     // Leer y ejecutar el archivo SQL
-    const sqlFile = fs.readFileSync(path.join(__dirname, 'init-db.sql'), 'utf8');
+    const sqlFile = fs.readFileSync(path.join(__dirname, 'migration.sql'), 'utf8');
     console.log('SQL File content:', sqlFile); // Debug
     
     // Ejecutar el SQL en un bloque try separado

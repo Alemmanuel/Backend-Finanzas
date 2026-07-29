@@ -4,7 +4,8 @@
   "description": "Finance Dashboard Backend with Node.js, Express, and PostgreSQL",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "migrate": "node createTable.js"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +14,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "nodemailer": "^9.0.3",
     "pg": "^8.13.3"
   }
 }
