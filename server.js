@@ -76,7 +76,8 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Servidor corriendo en http://localhost:${port}`);
-  runMigrations();
+runMigrations().then(() => {
+  app.listen(port, () => {
+    console.log(`Servidor corriendo en http://localhost:${port}`);
+  });
 });
