@@ -1,12 +1,13 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
 const pool = require('./db');
 dotenv.config();
 
 const routes = require('./routes');
 const authRoutes = require('./auth');
-
 
 const app = express();
 
@@ -16,6 +17,17 @@ app.options('*', cors());
 // Middlewares para parsear JSON y URL-encoded
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// **Auto-migración al iniciar**
+async function runMigrations() {
+  try {
+    const sql = fs.readFileSync(path.join(__dirname, 'migration.sql'), 'utf8');
+    await pool.query(sql);
+    console.log('✅ Migraciones ejecutadas correctamente');
+  } catch (err) {
+    console.error('❌ Error ejecutando migraciones:', err.message);
+  }
+}
 
 // **Endpoint de prueba de conexión a la base de datos**
 app.get('/api/test-db', async (req, res, next) => {
@@ -29,6 +41,17 @@ app.get('/api/test-db', async (req, res, next) => {
   } catch (error) {
     // En caso de error, pasa el error al middleware global
     next(error);
+  }
+});
+
+// **Endpoint para forzar migración manual (vía HTTP)**
+app.get('/api/migrate', async (req, res) => {
+  try {
+    const sql = fs.readFileSync(path.join(__dirname, 'migration.sql'), 'utf8');
+    await pool.query(sql);
+    res.json({ message: 'Migraciones ejecutadas correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error ejecutando migraciones', details: error.message });
   }
 });
 
@@ -55,4 +78,5 @@ app.use((err, req, res, next) => {
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Servidor corriendo en http://localhost:${port}`);
+  runMigrations();
 });
