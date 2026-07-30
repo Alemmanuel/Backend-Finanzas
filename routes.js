@@ -30,6 +30,7 @@ router.post('/transactions', async (req, res) => {
       INSERT INTO transactions (type, amount, description, date, category, user_id)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id, user_id, type, amount, description, category, date::date::text AS date, created_at`;
+    const values = [type, amount, description, date, category || null, user_id];
     const { rows } = await client.query(query, values);
     res.status(201).json({ message: 'Transacción agregada', transaction: rows[0] });
   } catch (error) {
