@@ -9,7 +9,7 @@ router.get('/transactions', async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      "SELECT id, user_id, type, amount, description, category, date::text, created_at FROM transactions WHERE user_id = $1 ORDER BY date DESC",
+      "SELECT id, user_id, type, amount, description, category, date::date::text AS date, created_at FROM transactions WHERE user_id = $1 ORDER BY date DESC",
       [user_id]
     );
     res.json({ data: rows, source: 'db' });
@@ -29,8 +29,7 @@ router.post('/transactions', async (req, res) => {
     const query = `
       INSERT INTO transactions (type, amount, description, date, category, user_id)
       VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, user_id, type, amount, description, category, date::text, created_at`;
-    const values = [type, amount, description, date, category || null, user_id];
+      RETURNING id, user_id, type, amount, description, category, date::date::text AS date, created_at`;
     const { rows } = await client.query(query, values);
     res.status(201).json({ message: 'Transacción agregada', transaction: rows[0] });
   } catch (error) {
@@ -53,7 +52,7 @@ router.put('/transactions/:id', async (req, res) => {
       UPDATE transactions
       SET type = $1, amount = $2, description = $3, date = $4, category = $5
       WHERE id = $6 AND user_id = $7
-      RETURNING id, user_id, type, amount, description, category, date::text, created_at`;
+      RETURNING id, user_id, type, amount, description, category, date::date::text AS date, created_at`;
     const values = [type, amount, description, date, category || null, id, user_id];
     const { rows } = await client.query(query, values);
     if (rows.length === 0) {
