@@ -330,10 +330,15 @@ async function checkReminders(userId) {
   return { sent };
 }
 
+function localDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 async function checkBudgetAlerts(userId, email) {
   const { start } = getCycleDates();
+  const cycleKey = localDateKey(start);
   const { rows: budgets } = await pool.query(
-    'SELECT id, category, limit_amount, email_alert_sent_at, push_alert_sent_at FROM budgets WHERE user_id = $1',
+    'SELECT id, category, limit_amount, email_alert_level, push_alert_level, alert_cycle FROM budgets WHERE user_id = $1',
     [userId]
   );
   const { rows: tx } = await pool.query(
@@ -354,41 +359,51 @@ async function checkBudgetAlerts(userId, email) {
     const spent = spentByCategory[b.category] || 0;
     const pct = limit > 0 ? (spent / limit) * 100 : 0;
 
-    const level = pct >= 100 ? 'exceeded' : pct >= 80 ? 'warning' : null;
-    if (!level) continue;
+    const wantLevel = pct >= 100 ? 'exceeded' : pct >= 80 ? 'warning' : null;
+    if (!wantLevel) continue;
+
+    const cycleChanged = b.alert_cycle !== cycleKey;
+    const emailLevel = cycleChanged ? null : b.email_alert_level;
+    const pushLevel = cycleChanged ? null : b.push_alert_level;
 
     const pctText = Math.round(pct);
     const sentChannels = [];
 
-    if (email && !(b.email_alert_sent_at && new Date(b.email_alert_sent_at) >= start)) {
-      const subject = level === 'exceeded'
+    if (email && emailLevel !== wantLevel) {
+      const subject = wantLevel === 'exceeded'
         ? `${b.category} pasó el límite`
         : `¡Cuidado! ${b.category} va en ${pctText}%`;
-      const html = level === 'exceeded'
+      const html = wantLevel === 'exceeded'
         ? `<h2>¡La billetera llora! 😭</h2><p><strong>${b.category}</strong> pasó el límite: has gastado <strong>${formatCOP(spent)}</strong> de <strong>${formatCOP(limit)}</strong>.</p>`
         : `<h2>¡Frena un poquito! 🛑</h2><p><strong>${b.category}</strong> va en <strong>${pctText}%</strong> (<strong>${formatCOP(spent)}</strong> de <strong>${formatCOP(limit)}</strong>).</p>`;
       try {
         await sendMail(email, subject, html);
-        await pool.query('UPDATE budgets SET email_alert_sent_at = NOW() WHERE id = $1', [b.id]);
+        await pool.query(
+          'UPDATE budgets SET email_alert_level = $2, email_alert_sent_at = NOW(), alert_cycle = $3 WHERE id = $1',
+          [b.id, wantLevel, cycleKey]
+        );
         sentChannels.push('email');
       } catch (e) {
         console.error('Error enviando email de alerta:', e.message);
       }
     }
 
-    if (!(b.push_alert_sent_at && new Date(b.push_alert_sent_at) >= start)) {
-      const title = level === 'exceeded'
+    if (pushLevel !== wantLevel) {
+      const title = wantLevel === 'exceeded'
         ? `${b.category} pasó el límite`
         : `¡Cuidado! ${b.category} va en ${pctText}%`;
-      const body = level === 'exceeded'
+      const body = wantLevel === 'exceeded'
         ? `${formatCOP(spent)} de ${formatCOP(limit)}. ¡La billetera llora! 😭`
         : `${formatCOP(spent)} de ${formatCOP(limit)}. Frena un poquito 🛑`;
       await pushToUser(userId, title, body, '/#transactions');
-      await pool.query('UPDATE budgets SET push_alert_sent_at = NOW() WHERE id = $1', [b.id]);
+      await pool.query(
+        'UPDATE budgets SET push_alert_level = $2, push_alert_sent_at = NOW(), alert_cycle = $3 WHERE id = $1',
+        [b.id, wantLevel, cycleKey]
+      );
       sentChannels.push('push');
     }
 
-    alerts.push({ category: b.category, level, pct, spent, limit, channels: sentChannels });
+    alerts.push({ category: b.category, level: wantLevel, pct, spent, limit, channels: sentChannels });
   }
 
   return { alerts };
