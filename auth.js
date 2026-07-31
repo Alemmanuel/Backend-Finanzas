@@ -1,22 +1,12 @@
 const express = require('express');
-const nodemailer = require('nodemailer');
 const router = express.Router();
+const { sendMail } = require('./mailer');
 
 const codes = new Map();
 
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
-
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_SMTP_HOST,
-  port: parseInt(process.env.EMAIL_SMTP_PORT),
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_ADDRESS,
-    pass: process.env.EMAIL_PASSWORD
-  }
-});
 
 router.post('/send-code', async (req, res) => {
   try {
@@ -26,12 +16,11 @@ router.post('/send-code', async (req, res) => {
     const code = generateCode();
     codes.set(email.toLowerCase(), { code, expires: Date.now() + 300000 });
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_ADDRESS,
-      to: email,
-      subject: 'Tu código de acceso - Control de Finanzas',
-      text: `Tu código de acceso es: ${code}\nVálido por 5 minutos.`
-    });
+    await sendMail(
+      email,
+      'Tu código de acceso - Control de Finanzas',
+      `<p>Tu código de acceso es: <strong>${code}</strong></p><p>Válido por 5 minutos.</p>`
+    );
 
     res.json({ message: 'Código enviado' });
   } catch (error) {

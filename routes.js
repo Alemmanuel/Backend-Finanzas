@@ -1,6 +1,19 @@
 const express = require('express');
 const pool = require('./db');
+const { sendMail } = require('./mailer');
 const router = express.Router();
+
+function getCycleDates(now = new Date()) {
+  let start, end;
+  if (now.getDate() >= 25) {
+    start = new Date(now.getFullYear(), now.getMonth(), 25, 0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 24, 23, 59, 59, 999);
+  } else {
+    start = new Date(now.getFullYear(), now.getMonth() - 1, 25, 0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), 24, 23, 59, 59, 999);
+  }
+  return { start, end };
+}
 
 router.get('/transactions', async (req, res) => {
   const { user_id } = req.query;
@@ -161,6 +174,122 @@ router.delete('/budgets/:category', async (req, res) => {
   } catch (error) {
     console.error('Error en DELETE /budgets/:category:', error.message);
     res.status(500).json({ error: 'Error al eliminar presupuesto', details: error.message });
+  }
+});
+
+// --- ALERTAS DE PRESUPUESTO ---
+
+router.post('/alerts/check-budgets', async (req, res) => {
+  const { user_id, email } = req.body;
+  if (!user_id || !email) {
+    return res.status(400).json({ error: 'user_id y email son requeridos' });
+  }
+  try {
+    const { start } = getCycleDates();
+    const { rows: budgets } = await pool.query(
+      'SELECT id, category, limit_amount, alert_sent_at FROM budgets WHERE user_id = $1',
+      [user_id]
+    );
+    const { rows: tx } = await pool.query(
+      "SELECT category, amount FROM transactions WHERE user_id = $1 AND type = 'expense' AND date >= $2",
+      [user_id, start]
+    );
+
+    const spentByCategory = {};
+    tx.forEach(t => {
+      const cat = t.category || 'Sin categoría';
+      spentByCategory[cat] = (spentByCategory[cat] || 0) + Number(t.amount);
+    });
+
+    const alerts = [];
+    for (const b of budgets) {
+      const limit = Number(b.limit_amount);
+      const spent = spentByCategory[b.category] || 0;
+      const pct = limit > 0 ? (spent / limit) * 100 : 0;
+
+      const level = pct >= 100 ? 'exceeded' : pct >= 80 ? 'warning' : null;
+      if (!level) continue;
+
+      const alreadySent = b.alert_sent_at && new Date(b.alert_sent_at) >= start;
+      if (alreadySent) continue;
+
+      const pctText = Math.round(pct);
+      const subject = level === 'exceeded'
+        ? `⚠️ Presupuesto excedido: ${b.category}`
+        : `⚠️ Presupuesto al ${pctText}%: ${b.category}`;
+      const html = level === 'exceeded'
+        ? `<h2>Presupuesto excedido</h2><p>Has gastado <strong>${formatCOP(spent)}</strong> de <strong>${formatCOP(limit)}</strong> en <strong>${b.category}</strong> (${pctText}%).</p>`
+        : `<h2>Presupuesto casi al límite</h2><p>Has gastado <strong>${formatCOP(spent)}</strong> de <strong>${formatCOP(limit)}</strong> en <strong>${b.category}</strong> (${pctText}%).</p>`;
+
+      await sendMail(email, subject, html);
+      await pool.query(
+        'UPDATE budgets SET alert_sent_at = NOW() WHERE id = $1',
+        [b.id]
+      );
+      alerts.push({ category: b.category, level, pct, spent, limit });
+    }
+
+    res.json({ alerts });
+  } catch (error) {
+    console.error('Error en POST /alerts/check-budgets:', error.message);
+    res.status(500).json({ error: 'Error al verificar alertas', details: error.message });
+  }
+});
+
+function formatCOP(n) {
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+}
+
+// --- CATEGORÍAS ---
+
+router.get('/categories', async (req, res) => {
+  const { user_id } = req.query;
+  if (!user_id) return res.status(400).json({ error: 'user_id es requerido' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, name, color FROM categories WHERE user_id = $1 ORDER BY name',
+      [user_id]
+    );
+    res.json({ data: rows });
+  } catch (error) {
+    console.error('Error en GET /categories:', error.message);
+    res.status(500).json({ error: 'Error al obtener categorías', details: error.message });
+  }
+});
+
+router.post('/categories', async (req, res) => {
+  const { user_id, name, color } = req.body;
+  if (!user_id || !name) return res.status(400).json({ error: 'user_id y name son requeridos' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO categories (user_id, name, color)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, name)
+       DO UPDATE SET color = $3
+       RETURNING id, name, color`,
+      [user_id, name, color || null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (error) {
+    console.error('Error en POST /categories:', error.message);
+    res.status(500).json({ error: 'Error al guardar categoría', details: error.message });
+  }
+});
+
+router.delete('/categories/:name', async (req, res) => {
+  const { user_id } = req.query;
+  const { name } = req.params;
+  if (!user_id || !name) return res.status(400).json({ error: 'user_id y name son requeridos' });
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM categories WHERE user_id = $1 AND name = $2',
+      [user_id, name]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Categoría no encontrada' });
+    res.json({ message: 'Categoría eliminada' });
+  } catch (error) {
+    console.error('Error en DELETE /categories/:name:', error.message);
+    res.status(500).json({ error: 'Error al eliminar categoría', details: error.message });
   }
 });
 
