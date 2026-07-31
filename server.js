@@ -108,10 +108,10 @@ runMigrations().then(() => {
   });
 });
 
-// **Cron: verifica recordatorios y presupuestos (envía push) cada hora**
+// **Cron: verifica recordatorios (envía push) cada hora**
 if (process.env.ENABLE_ALERT_CRON !== 'false') {
   cron.schedule('0 * * * *', async () => {
-    console.log('🔔 Cron: revisando recordatorios y presupuestos...');
+    console.log('🔔 Cron: revisando recordatorios...');
     try {
       const { rows: users } = await pool.query(
         'SELECT DISTINCT user_id FROM push_subscriptions'
@@ -121,10 +121,6 @@ if (process.env.ENABLE_ALERT_CRON !== 'false') {
           const { sent } = await routes.checkReminders(u.user_id);
           if (sent.length > 0) {
             console.log(`   → ${u.user_id}: recordatorio(s) ${sent.join(', ')}`);
-          }
-          const { alerts } = await routes.checkBudgetAlerts(u.user_id, null);
-          if (alerts.length > 0) {
-            console.log(`   → ${u.user_id}: ${alerts.length} alerta(s) de presupuesto`);
           }
         } catch (e) {
           console.error(`   Error para usuario ${u.user_id}:`, e.message);
