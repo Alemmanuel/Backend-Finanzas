@@ -3,7 +3,9 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+const cron = require('node-cron');
 const pool = require('./db');
+const push = require('./push');
 dotenv.config();
 
 const routes = require('./routes');
@@ -100,7 +102,37 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 3000;
 runMigrations().then(() => {
+  push.configure();
   app.listen(port, () => {
     console.log(`Servidor corriendo en http://localhost:${port}`);
   });
 });
+
+// **Cron: verifica recordatorios y presupuestos (envía push) cada hora**
+if (process.env.ENABLE_ALERT_CRON !== 'false') {
+  cron.schedule('0 * * * *', async () => {
+    console.log('🔔 Cron: revisando recordatorios y presupuestos...');
+    try {
+      const { rows: users } = await pool.query(
+        'SELECT DISTINCT user_id FROM push_subscriptions'
+      );
+      for (const u of users) {
+        try {
+          const { sent } = await routes.checkReminders(u.user_id);
+          if (sent.length > 0) {
+            console.log(`   → ${u.user_id}: recordatorio(s) ${sent.join(', ')}`);
+          }
+          const { alerts } = await routes.checkBudgetAlerts(u.user_id, null);
+          if (alerts.length > 0) {
+            console.log(`   → ${u.user_id}: ${alerts.length} alerta(s) de presupuesto`);
+          }
+        } catch (e) {
+          console.error(`   Error para usuario ${u.user_id}:`, e.message);
+        }
+      }
+      console.log('🏁 Verificación finalizada');
+    } catch (err) {
+      console.error('Error en cron:', err.message);
+    }
+  });
+}
