@@ -86,7 +86,7 @@ app.use('/api', routes);
 
 // Ruta de prueba para confirmar que el servidor funciona
 app.get('/', (req, res) => {
-  res.send('Servidor corriendo correctamente');
+  res.send('API de Finanzas en funcionamiento');
 });
 
 // **Middleware de manejo de errores global**
